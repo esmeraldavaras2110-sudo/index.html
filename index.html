@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor de Pulso Arduino</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f9; padding: 20px; }
+    .card { background: white; padding: 20px; border-radius: 12px; max-width: 400px; margin: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    button { background-color: #007bff; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; margin: 5px; }
+    button:hover { background-color: #0056b3; }
+    .data-box { font-size: 2rem; font-weight: bold; color: #d9534f; margin-top: 15px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Monitor de Pulso BLE</h2>
+    <button id="connectBtn">Conectar Bluetooth</button>
+    <button id="disconnectBtn" disabled>Desconectar</button>
+    
+    <div class="data-box">
+      Lectura: <span id="dataValue">--</span>
+    </div>
+    <p id="status">Estado: Desconectado</p>
+  </div>
+
+  <script>
+    let bluetoothDevice;
+    let gattCharacteristic;
+
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const dataValue = document.getElementById('dataValue');
+    const statusText = document.getElementById('status');
+
+    connectBtn.addEventListener('click', async () => {
+      try {
+        statusText.innerText = "Estado: Buscando dispositivos...";
+        
+        // Solicitar dispositivo Bluetooth BLE
+        bluetoothDevice = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb'] // UUID común para HM-10 / BLE
+        });
+
+        statusText.innerText = "Estado: Conectando a GATT...";
+        const server = await bluetoothDevice.gatt.connect();
+
+        statusText.innerText = "Estado: Obteniendo Servicio...";
+        const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+
+        statusText.innerText = "Estado: Obteniendo Característica...";
+        gattCharacteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+
+        // Suscribirse a las notificaciones de entrada de datos
+        await gattCharacteristic.startNotifications();
+        gattCharacteristic.addEventListener('characteristicvaluechanged', handleData);
+
+        statusText.innerText = "Estado: ¡Conectado!";
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+
+      } catch (error) {
+        console.error(error);
+        statusText.innerText = "Error: " + error.message;
+      }
+    });
+
+    function handleData(event) {
+      const value = new TextDecoder().decode(event.target.value);
+      dataValue.innerText = value.trim();
+    }
+
+    disconnectBtn.addEventListener('click', () => {
+      if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+        bluetoothDevice.gatt.disconnect();
+        statusText.innerText = "Estado: Desconectado";
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        dataValue.innerText = "--";
+      }
+    });
+  </script>
+
+</body>
+</html>
